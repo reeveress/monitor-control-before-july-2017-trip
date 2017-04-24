@@ -13,7 +13,8 @@ class mcNode():
     def __init__(self):
             
             
-    #Class object init makes a connection with our 1U server to grap redis database values
+    # Class object init makes a connection with our 1U server to grap redis database values
+    # Redis bind to port 6379 by default
 	self.r = redis.StrictRedis(host = HOST)
 
     # Returns a dict of temperature sensors
@@ -24,15 +25,23 @@ class mcNode():
         tempMid = float((self.r.hmget("status:node:%d"%node,"tempMid"))[0])
         temps = {'tempBot':tempBot,'tempMid':tempMid}
         return temps 
+
+
+
     def getHumid(self,node):
         return self.r.hmget("status:node:%d"%node,"humidities")
+
+
 
 
     def getAir(self,node):
         return self.r.hmget("status:node:%d"%node,"airflow")
 
+
+
+
     def getTempDebug(self,node):
-        self.r.hmset("status:node:%d"%node,"getTemps",True)
+        self.r.hset("status:node:%d"%node,"getTemps",True)
         print("getTemps flag set")
         print(self.r.hmget("status:node:%d"%node,"getTemps"))
         print(type(self.r.hmget("status:node:%d"%node,"getTemps"))) 
