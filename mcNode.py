@@ -41,10 +41,8 @@ class mcNode():
 
 
     def getTempDebug(self,node):
+        # Set getTemps hash field to True. 
         self.r.hset("status:node:%d"%node,"getTemps",True)
-        print("getTemps flag set")
-        print(self.r.hmget("status:node:%d"%node,"getTemps"))
-        print(type(self.r.hmget("status:node:%d"%node,"getTemps"))) 
         time.sleep(5)
         tempBotDebug = float(self.r.hmget("status:node:%d"%node, "tempBot")[0])
         tempMidDebug = float(self.r.hmget("status:node:%d"%node, "tempMidDebug")[0])
