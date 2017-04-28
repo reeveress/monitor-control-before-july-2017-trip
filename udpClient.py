@@ -18,6 +18,7 @@
 
 
 import time
+import datetime
 import struct
 import redis
 import socket
@@ -76,6 +77,9 @@ while 1:
         r.hmset('status:node:0', {'tempMid':unpacked_mcptemp[0]})
 	r.hmset('status:node:0', {'humidBot':unpacked_htuhumid[0]})
 
+        # Set timestamp 
+        r.hmset('status:node:0', {'timestamp':str(datetime.datetime.now())})
+
         # Check if getTemps flag is set by a mcNode object
         if (r.hmget('status:node:0', 'getTemps') == "True"):
             print("Inside the if statement")
@@ -97,6 +101,9 @@ while 1:
                 r.hmset('status:node:0', {'tempBotDebug':unpacked_htutemp_debug[0]})
                 r.hmset('status:node:0', {'tempMidDebug':unpacked_mcptemp_debug[0]})
     #               print(r.hmget('status:node:0','tempBotDebug'))
+
+                # Set timestamp
+                r.hmset('status:node:0', {'timestamp':str(datetime.datetime.now())})
 
                 # Reset the flag for next request 
                 r.hmset('status:node:0', {'getTemps':False}) 

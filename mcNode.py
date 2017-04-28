@@ -20,11 +20,12 @@ class mcNode():
     # Returns a dict of temperature sensors
     def getTemp(self,node):
         
-        
+        redistime = self.r.hmget("status:node:%d"%node, "timestamp")[0] 
+        timestamp = {'timestamp': redistime}
         tempBot = float((self.r.hmget("status:node:%d"%node,"tempBot"))[0])
         tempMid = float((self.r.hmget("status:node:%d"%node,"tempMid"))[0])
         temps = {'tempBot':tempBot,'tempMid':tempMid}
-        return temps 
+        return temps, timestamp 
 
 
 
