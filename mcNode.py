@@ -24,8 +24,8 @@ class mcNode():
         timestamp = {'timestamp': redistime}
         tempBot = float((self.r.hmget("status:node:%d"%node,"tempBot"))[0])
         tempMid = float((self.r.hmget("status:node:%d"%node,"tempMid"))[0])
-        temps = {'tempBot':tempBot,'tempMid':tempMid}
-        return temps, timestamp 
+        temps = {'timestamp':timestamp,'tempBot':tempBot,'tempMid':tempMid}
+        return temps
 
 
 
@@ -47,8 +47,15 @@ class mcNode():
         time.sleep(5)
         tempBotDebug = float(self.r.hmget("status:node:%d"%node, "tempBot")[0])
         tempMidDebug = float(self.r.hmget("status:node:%d"%node, "tempMidDebug")[0])
-        tempsDebug = {'tempBotDebug':tempBotDebug, 'tempMidDebug':tempMidDebug}
+        timestampDebug = self.r.hmget("status:node:%d"%node, "timestampDebug")[0]
+                
+        # Return a dictionary of float values and string timestamp
+        tempsDebug = {'timestamp':timestampDebug,'tempBotDebug':tempBotDebug, 'tempMidDebug':tempMidDebug}
         return tempsDebug
 
+    def reset(self,node):
+        self.r.hset("status:node:%d"%node,"reset",True)
+        print("Set reset flag to True")
+        return 
     #def accumulate(self):
 	# accumulates specified number of data or for specified period of time, saves to a file, maybe a plot script. Would be cool if I had a real time data upload to a server with cool graphix. 

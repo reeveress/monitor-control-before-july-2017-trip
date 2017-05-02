@@ -112,9 +112,24 @@ while 1:
             except:
 
                 pass
+        print(r.hmget('status:node:0', 'reset'))
+        print(type(r.hmget('status:node:0', 'reset')))
+        print(len(r.hmget('status:node:0', 'reset')))
+        print((r.hmget('status:node:0', 'reset')[0]))
+        print(type(r.hmget('status:node:0', 'reset')[0]))
+        if (r.hmget('status:node:0', 'reset')[0] == "True"):
+            print("inside reset if")            
+            # Reset the microcontroller when reset is sent through the mcNode class
+            # might remove this functionality in the future; too much power for the mcNode class
+            client_socket.sendto('reset', addressArduino)
+
+            time.sleep(2)
+
+            # Reset the flag to False so it's not resetting microcontroller to infinity
+            r.hmset('status:node:0', {'reset': False})
+            
 
         # Set delay before receiving more data
         time.sleep(2)
 
 
-s.close()
