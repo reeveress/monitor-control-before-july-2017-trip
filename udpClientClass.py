@@ -10,14 +10,15 @@ serverAddress = '10.0.1.224'
 
 
 # Make this a passable argument => instance-level attribute
-arduinoAddress = '10.1.1.247'
+#arduinoAddress = '10.1.1.247'
 
+PORT = 8888
 
 
 class UdpClient():
     
 
-    def __init__(self, node, PORT):
+    def __init__(arduinoAddress,self):
      
         # define socket address for binding 
         localSocket = (serverAddress, PORT)
@@ -59,10 +60,14 @@ class UdpClient():
             # Arduino sends a Struct via UDP so unpacking is needed 
             # struct.unpack returns a tuple with one element
             # Each struct element is 4 Bytes (c floats are packed as 4 byte strings)
-            unpacked_mcptemp = struct.unpack('=f',data[0:4])
-            unpacked_htutemp = struct.unpack('=f', data[4:8])
-            unpacked_htuhumid = struct.unpack('=f', data[8:12])
 
+            unpacked_nodeID = struct.unpack('=f',data[0:4])
+            unpacked_mcptemp = struct.unpack('=f',data[4:8])
+            unpacked_htutemp = struct.unpack('=f', data[8:12])
+            unpacked_htuhumid = struct.unpack('=f', data[12:16])
+            print('Unpacked_nodeID: ',unpacked_nodeID) 
+            node = int(unpacked_nodeID[0])
+            print('Node ID: ', node)
     #       print('Unpack type: ', type(unpacked_mcptemp))
     #       print('MCP9808 Temperature: ' ,unpacked_mcptemp[0])
     #       print('HTU21DF Temperature: ', unpacked_htutemp[0])
@@ -76,7 +81,7 @@ class UdpClient():
             # Set timestamp 
             r.hmset('status:node:%d'%node, {'timestamp':str(datetime.datetime.now())})
 
-            print(r.hgetall('status:node:%d'%node))
+            print('status:node:%d'%node,r.hgetall('status:node:%d'%node))
 
 
 
@@ -87,7 +92,7 @@ class UdpClient():
                     print('getTemps is...',bool(r.hmget('status:node:%d'%node, 'getTemps')))
                     print('getTemps is...',type(bool(r.hmget('status:node:%d'%node, 'getTemps'))))
 
-                    client_socket.sendto('getTemps', arduinoAddress)
+                    client_socket.sendto('getTemps', arduinoSocket)
 
                     time.sleep(2)
                     # Arduino checks if it received any udp packets and sends a respons back based on request
@@ -120,12 +125,12 @@ class UdpClient():
             # might remove this functionality in the future; too much power for the mcNode class
             if (r.hmget('status:node:%d'%node, 'reset')[0] == "True"):
     #            print("Inside the reset if block")
-                client_socket.sendto('reset', arduinoAddress)
+                client_socket.sendto('reset', arduinoSocket)
 
                 time.sleep(2)
 
                 # Reset the flag to False so it's not resetting microcontroller to infinity
-                r.hmset('status:node:0', {'reset': False})
+                r.hmset('status:node:%d'%d, {'reset': False})
 
 
             # Set delay before receiving more data

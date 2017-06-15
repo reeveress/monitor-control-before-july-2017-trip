@@ -17,7 +17,7 @@
 //      3              ---- ----       MAC byte 3
 //      4              ---- ----       MAC byte 4
 //      5              ---- ----       MAC byte 5
-//      6              ---- ----       unassigned 
+//      6              ---- ----        Node ID 
 //      7              ---- ----       unassigned
 //      8              ---- ----       unassigned
 //      9              ---- ----       unassigned
@@ -42,12 +42,14 @@ int packetSize;
 
 // For future use; initializing buffer and data variables for receiving packets from the server
 char packetBuffer[UDP_TX_PACKET_MAX_SIZE];
-String datReq; //String for data
+String datReq; // String for data
 
 byte mac[6];
 
 unsigned int EEPROM_SIZE = 1024;
-unsigned int eeadr = 0; //MACburner.bin writes MAC addres to the first 6 addresses of EEPROM
+unsigned int eeadr = 0; // MACburner.bin writes MAC addres to the first 6 addresses of EEPROM
+unsigned int eeNodeAdr = 6; // EEPROM node ID address
+
 
 // Sensor objects
 Adafruit_MCP9808 mcp = Adafruit_MCP9808(); 
@@ -59,6 +61,7 @@ float tempF; // Declare variable for temperature in F
 
 // struct for a UDP packet
 struct sensors {
+  float nodeID;
   float mcpTemp;
   float htuTemp;
   float htuHumid;
@@ -79,8 +82,12 @@ void setup() {
     mac[i] = EEPROM.read(eeadr);
     ++eeadr;
     }
-  
-  /*for (int i = 0; i < 1024; i++) {
+    
+  // Read node ID from EEPROM (burned with MACburner.bin sketch) and assign it to struct nodeID member
+   sensorArray.nodeID = EEPROM.read(eeNodeAdr);
+   sensorArrayDebug.nodeID = EEPROM.read(eeNodeAdr);
+  /*
+  for (int i = 0; i < 1024; i++) {
     Serial.println("Printing the contents of EEPROM");
     Serial.print("Address: ");
     Serial.print(i);
@@ -99,30 +106,45 @@ void setup() {
       ;
   }
   Serial.println(Ethernet.localIP());
+  
   // Start UDP
   Udp.begin(localPort);
   delay(1500); // delay to give time for initialization
 
+  
+  // Enable Watchdog for 8 seconds
+  Watchdog.enable(8000);
+
   // Checking if HTU21DF temp and humidity sensor
   if (!htu.begin()) {
-    Serial.println("Couldn't find HTU21DF");
+    Serial.println("Couldn't find HTU21DF!");
+    Serial.println("Resetting the Microcontroller until the sensor is back online");
+    delay(10000);
   }
 
-  // Checking if sensor is connected; if not then stay in perpetual loop of doom
+  // Checking if sensor is connected; if not keep resetting
   if (!mcp.begin()) {
     Serial.println("Couldn't find MCP9808!");
-    while (1);
+    Serial.println("Resetting the Microcontroller until the sensor is back online");
+    delay(10000);
   }
 
   // Set Pin 7 as the reset pin
   pinMode(7, OUTPUT);
   digitalWrite(7, HIGH);
+
+//  // Set pin mode to test digital GPIO pins
+//  pinMode(2, OUTPUT);
+//  pinMode(3, OUTPUT);
+//  pinMode(4, OUTPUT);
+//  pinMode(5, OUTPUT);
+//  pinMode(6, OUTPUT);
+//  // pin 7 is used for reset pin circuit
+//  pinMode(8, OUTPUT);
+//  pinMode(9, OUTPUT);
+
+
   
-
-
-  // Enable Watchdog for 10 seconds
-  Watchdog.enable(8000);
-
 
   
 }
@@ -163,11 +185,14 @@ void loop() {
     Serial.println("Time in ms to get htuTemp reading: ");
     Serial.println(htu_after - htu_before);
 
+    Serial.println("Sending UDP packet......");
+    
+
     //Watchdog.reset();
    int udp_before = millis();
     // Send UDP packet to the server ip address serverIp that's listening on port localPort
     Udp.beginPacket(serverIp, localPort); // Initialize the packet send
-    Udp.write((byte *)&sensorArray, sizeof sensorArray); // Send the temperature
+    Udp.write((byte *)&sensorArray, sizeof sensorArray); // Send the struct as UDP packet
     Udp.endPacket(); // End the packet
     int udp_after = millis();
     Serial.println("Time in ms to send a UDP packet: ");
@@ -197,6 +222,8 @@ void loop() {
         sensorArrayDebug.mcpTemp = mcp.readTempC();
         delay(2000);
     
+        
+        
         // Read and send humidity and temperature from HTU21DF sensor and send as UDP
         sensorArrayDebug.htuTemp = htu.readTemperature();
         sensorArrayDebug.htuHumid = htu.readHumidity();
@@ -224,8 +251,35 @@ void loop() {
     
     // Renew DHCP lease - times out eventually if this is removed
     Ethernet.maintain();
+
+    // stroke the watchdog just in case
+    Watchdog.reset();
+   
+    // Toggle all other digital pins to make sure sensor code doesn't use them
+//    digitalWrite(2, LOW);
+//    digitalWrite(3, LOW);
+//    digitalWrite(4, LOW);
+//    digitalWrite(5, LOW);
+//    digitalWrite(6, LOW);
+//    // pin 7 is used for reset
+//    digitalWrite(8, LOW);
+//    digitalWrite(9, LOW);
+//    
+//    
+//    delay(4000);
+//    
+//    digitalWrite(2, HIGH);
+//    digitalWrite(3, HIGH);
+//    digitalWrite(4, HIGH);
+//    digitalWrite(5, HIGH);
+//    digitalWrite(6, HIGH);
+//    // pin 7 is used for reset
+//    digitalWrite(8, HIGH);
+//    digitalWrite(9, HIGH);
     
     
+
+
     
     
    }
