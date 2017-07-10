@@ -25,15 +25,17 @@ class UdpClient():
     def __init__(self):
 
         # define socket address for binding; necessary for receiving data from Arduino 
-        localSocket = (serverAddress, PORT)
+        self.localSocket = (serverAddress, PORT)
 
 
         # Instantiate redis object connected to redis server running on serverAddress
-        r = redis.StrictRedis(serverAddress)
+        self.r = redis.StrictRedis(serverAddress)
 
         # Create a UDP socket
         try:
-                client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                # Make sure that specify that we want to reuse the socket address
+                self.client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 print('Socket created')
         except socket.error, msg:
                 print('Failed to create socket. Error Code : ' + str(msg[0]) + ' Message ' + str(msg[1]))
@@ -42,7 +44,7 @@ class UdpClient():
 
         # Bind socket to local host and port
         try:
-                client_socket.bind(localSocket)
+                self.client_socket.bind(self.localSocket)
                 print('Bound socket')
         except socket.error , msg:
                 print('Bind failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1])
@@ -52,7 +54,7 @@ class UdpClient():
 
         # define arduino socket to send requests
         arduinoSocket = (arduinoAddress, PORT)
-        client_socket.sendto('reset', arduinoSocket)
+        self.client_socket.sendto('reset', arduinoSocket)
 
         # Set delay before receiving more data
         time.sleep(2)
@@ -61,7 +63,7 @@ class UdpClient():
         
         # define arduino socket to send requests
         arduinoSocket = (arduinoAddress, PORT)
-        client_socket.sendto('PSU_%s'%command, arduinoSocket)
+        self.client_socket.sendto('PSU_%s'%command, arduinoSocket)
 
         # Set delay before receiving more data
         time.sleep(2)
@@ -70,7 +72,7 @@ class UdpClient():
         
         # define arduino socket to send requests
         arduinoSocket = (arduinoAddress, PORT)
-        client_socket.sendto('wr_%s'%command, arduinoSocket)
+        self.client_socket.sendto('wr_%s'%command, arduinoSocket)
 
         # Set delay before receiving more data
         time.sleep(2)
@@ -79,7 +81,7 @@ class UdpClient():
         
         # define arduino socket to send requests
         arduinoSocket = (arduinoAddress, PORT)
-        client_socket.sendto('FEM_%s'%command, arduinoSocket)
+        self.client_socket.sendto('FEM_%s'%command, arduinoSocket)
 
         # Set delay before receiving more data
         time.sleep(2)
@@ -88,7 +90,7 @@ class UdpClient():
         
         # define arduino socket to send requests
         arduinoSocket = (arduinoAddress, PORT)
-        client_socket.sendto('PAM_%s'%command, arduinoSocket)
+        self.client_socket.sendto('PAM_%s'%command, arduinoSocket)
 
         # Set delay before receiving more data
         time.sleep(2)

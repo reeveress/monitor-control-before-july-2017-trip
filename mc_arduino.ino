@@ -17,7 +17,7 @@
 //      3              ---- ----       MAC byte 3
 //      4              ---- ----       MAC byte 4
 //      5              ---- ----       MAC byte 5
-//      6              ---- ----       unassigned 
+//      6              ---- ----        Node ID 
 //      7              ---- ----       unassigned
 //      8              ---- ----       unassigned
 //      9              ---- ----       unassigned
@@ -42,28 +42,51 @@ int packetSize;
 
 // For future use; initializing buffer and data variables for receiving packets from the server
 char packetBuffer[UDP_TX_PACKET_MAX_SIZE];
-String datReq; //String for data
+String datReq; // String for data
 
 byte mac[6];
 
 unsigned int EEPROM_SIZE = 1024;
-unsigned int eeadr = 0; //MACburner.bin writes MAC addres to the first 6 addresses of EEPROM
+unsigned int eeadr = 0; // MACburner.bin writes MAC addres to the first 6 addresses of EEPROM
+unsigned int eeNodeAdr = 6; // EEPROM node ID address
+
 
 // Sensor objects
 Adafruit_MCP9808 mcp = Adafruit_MCP9808(); 
 Adafruit_HTU21DF htu = Adafruit_HTU21DF();
 
 
-float tempC; // Declare variable for temperature in C
-float tempF; // Declare variable for temperature in F
+
+// Wind Sensor
+
+#define analogPinForRV    1   // change to pins you the analog pins are using
+#define analogPinForTMP   0
+
+// to calibrate your sensor, put a glass over it, but the sensor should not be
+// touching the desktop surface however.
+// adjust the zeroWindAdjustment until your sensor reads about zero with the glass over it. 
+
+const float zeroWindAdjustment =  -.4; // negative numbers yield smaller wind speeds and vice versa.
+
+int TMP_Therm_ADunits;  //temp termistor value from wind sensor
+float RV_Wind_ADunits;    //RV output from wind sensor 
+float RV_Wind_Volts;
+int TempCtimes100;
+float zeroWind_ADunits;
+float zeroWind_volts;
+
+
 
 // struct for a UDP packet
 struct sensors {
+  float nodeID;
   float mcpTemp;
   float htuTemp;
   float htuHumid;
+  float windSpeed_MPH;
+  float tempCAirflow;
 
-} sensorArray,sensorArrayDebug;
+} sensorArray;
 
 
 
@@ -79,8 +102,12 @@ void setup() {
     mac[i] = EEPROM.read(eeadr);
     ++eeadr;
     }
+    
+  // Read node ID from EEPROM (burned with MACburner.bin sketch) and assign it to struct nodeID member
+   sensorArray.nodeID = EEPROM.read(eeNodeAdr);
+
   
-  /*for (int i = 0; i < 1024; i++) {
+  for (int i = 0; i < 8; i++) {
     Serial.println("Printing the contents of EEPROM");
     Serial.print("Address: ");
     Serial.print(i);
@@ -89,7 +116,7 @@ void setup() {
     Serial.print(EEPROM.read(i));
     Serial.print("\t");
 
-  }*/
+  }
 
   // Start Ethernet connection, automatically tries to get IP using DHCP
   if (Ethernet.begin(mac) == 0) {
@@ -99,32 +126,47 @@ void setup() {
       ;
   }
   Serial.println(Ethernet.localIP());
+  
   // Start UDP
   Udp.begin(localPort);
   delay(1500); // delay to give time for initialization
 
-  // Checking if HTU21DF temp and humidity sensor
-  if (!htu.begin()) {
-    Serial.println("Couldn't find HTU21DF");
-  }
-
-  // Checking if sensor is connected; if not then stay in perpetual loop of doom
-  if (!mcp.begin()) {
-    Serial.println("Couldn't find MCP9808!");
-    while (1);
-  }
-
-  // Set Pin 7 as the reset pin
-  pinMode(7, OUTPUT);
-  digitalWrite(7, HIGH);
   
-
-
-  // Enable Watchdog for 10 seconds
+  // Enable Watchdog for 8 seconds
   Watchdog.enable(8000);
 
+  // Checking if HTU21DF temp and humidity sensor
+  if (!htu.begin()) {
+    Serial.println("Couldn't find HTU21DF!");
+    Serial.println("Resetting the Microcontroller until the sensor is back online");
+    delay(10000);
+  }
+
+  // Checking if sensor is connected; if not keep resetting
+  if (!mcp.begin()) {
+    Serial.println("Couldn't find MCP9808!");
+    Serial.println("Resetting the Microcontroller until the sensor is back online");
+    delay(10000);
+  }
 
   
+  
+  // Set Pin 4 as the reset pin
+  pinMode(4, OUTPUT);
+  digitalWrite(4, HIGH);
+  // PSU VAC pin
+  pinMode(2, OUTPUT);
+  digitalWrite(2, LOW);
+  // White Rabbit 5V pin
+  pinMode(3, OUTPUT);
+  digitalWrite(3,LOW);
+  // FEM VAC pin
+  pinMode(5, OUTPUT);
+  digitalWrite(5, LOW);
+  // PAM VAC pin
+  pinMode(6, OUTPUT);
+  digitalWrite(6, LOW);
+   
 }
 
 
@@ -163,11 +205,52 @@ void loop() {
     Serial.println("Time in ms to get htuTemp reading: ");
     Serial.println(htu_after - htu_before);
 
-    //Watchdog.reset();
-   int udp_before = millis();
+ 
+    // Wind Sensor
+      
+    TMP_Therm_ADunits = analogRead(analogPinForTMP);
+    RV_Wind_ADunits = analogRead(analogPinForRV);
+    RV_Wind_Volts = (RV_Wind_ADunits *  0.0048828125);
+
+    // these are all derived from regressions from raw data as such they depend on a lot of experimental factors
+    // such as accuracy of temp sensors, and voltage at the actual wind sensor, (wire losses) which were unaccouted for.
+    TempCtimes100 = (0.005 *((float)TMP_Therm_ADunits * (float)TMP_Therm_ADunits)) - (16.862 * (float)TMP_Therm_ADunits) + 9075.4;  
+    sensorArray.tempCAirflow = TempCtimes100/100.0;
+    zeroWind_ADunits = -0.0006*((float)TMP_Therm_ADunits * (float)TMP_Therm_ADunits) + 1.0727 * (float)TMP_Therm_ADunits + 47.172;  //  13.0C  553  482.39
+
+    zeroWind_volts = (zeroWind_ADunits * 0.0048828125) - zeroWindAdjustment;  
+
+    // This from a regression from data in the form of 
+    // Vraw = V0 + b * WindSpeed ^ c
+    // V0 is zero wind at a particular temperature
+    // The constants b and c were determined by some Excel wrangling with the solver.
+    
+    sensorArray.windSpeed_MPH =  pow(((RV_Wind_Volts - zeroWind_volts) /.2300) , 2.7265);   
+   
+    Serial.print("  TMP volts ");
+    Serial.print(TMP_Therm_ADunits * 0.0048828125);
+    
+    Serial.print(" RV volts ");
+    Serial.print((float)RV_Wind_Volts);
+
+    Serial.print("TempC");
+    Serial.print(sensorArray.tempCAirflow);
+
+    Serial.print("   ZeroWind volts ");
+    Serial.print(zeroWind_volts);
+
+    Serial.print("   WindSpeed MPH ");
+    Serial.println(sensorArray.windSpeed_MPH);
+      
+    
+      
+      
+    Serial.println("Sending UDP packet......");
+    int udp_before = millis();
     // Send UDP packet to the server ip address serverIp that's listening on port localPort
+    
     Udp.beginPacket(serverIp, localPort); // Initialize the packet send
-    Udp.write((byte *)&sensorArray, sizeof sensorArray); // Send the temperature
+    Udp.write((byte *)&sensorArray, sizeof sensorArray); // Send the struct as UDP packet
     Udp.endPacket(); // End the packet
     int udp_after = millis();
     Serial.println("Time in ms to send a UDP packet: ");
@@ -179,6 +262,7 @@ void loop() {
     memset(packetBuffer, 0, UDP_TX_PACKET_MAX_SIZE);
   
     int udpparse_before = millis();
+    
     // Check if request was sent to Arduino
     packetSize = Udp.parsePacket(); //Reads the packet size
     
@@ -189,33 +273,49 @@ void loop() {
       Serial.println("Contents of the packetBuffer: ");
       Serial.println(packetBuffer);
         
-      // Reset Watchdog before all the delays
-      //Watchdog.reset();
-      if (datReq =="getTemps") { //Do the following if Temperature is requested
-        Serial.println("....Got UDP packet request from sockServer...");
-        // Make a temperature reading and save it in a struct
-        sensorArrayDebug.mcpTemp = mcp.readTempC();
-        delay(2000);
-    
-        // Read and send humidity and temperature from HTU21DF sensor and send as UDP
-        sensorArrayDebug.htuTemp = htu.readTemperature();
-        sensorArrayDebug.htuHumid = htu.readHumidity();
-        Serial.println(sensorArrayDebug.htuTemp);
-    
-        // Send UDP packet to the server ip address serverIp that's listening on port localPort
-        Udp.beginPacket(serverIp, localPort); // Initialize the packet send
-        Udp.write((byte *)&sensorArrayDebug, sizeof sensorArrayDebug); 
-        Udp.endPacket(); // End the packet
-        delay(2000);
-        
+      
+      if (datReq == "PSU_on") {
+        digitalWrite(2, HIGH);
+      }     
+      
+      if (datReq == "PSU_off") {
+        digitalWrite(2, LOW);
       }
+      
+      if (datReq == "WR_on") {
+        digitalWrite(3, HIGH);
+      }
+      
+      if (datReq == "WR_off") {
+        digitalWrite(3, LOW);
+      }
+      
+      if (datReq == "FEM_on") {
+        digitalWrite(5, HIGH);
+      }
+      
+      if (datReq == "FEM_off") {
+        digitalWrite(5, LOW);
+      }
+      
+      if (datReq == "PAM_on") {
+        digitalWrite(6, HIGH);
+      }
+      
+      if (datReq == "PAM_off") {
+        digitalWrite(6, LOW);
+      }
+      
+    
       if (datReq == "reset") {
         Serial.println("Resetting the microcontroller...");
-        digitalWrite(7, LOW);
+        digitalWrite(4, LOW);
         }
-    int udpparse_after = millis();
-    Serial.println("Time in ms that it took to check for received packet from udpClient.py, getTempDebug readings, etc..: ");
-    Serial.println(udpparse_after - udpparse_before);
+    
+    
+      int udpparse_after = millis();
+      Serial.println("Time in ms that it took to check for received packet from udpClient.py, getTempDebug readings, etc..: ");
+      Serial.println(udpparse_after - udpparse_before);
     
     }
 
@@ -224,9 +324,11 @@ void loop() {
     
     // Renew DHCP lease - times out eventually if this is removed
     Ethernet.maintain();
-    
-    
-    
+
+    // stroke the watchdog just in case
+    Watchdog.reset();
+   
+  
     
    }
   
