@@ -67,11 +67,12 @@ class UdpClient():
             # Each struct element is 4 Bytes (c floats are packed as 4 byte strings)
 
             unpacked_nodeID = struct.unpack('=f',data[0:4])
-            unpacked_mcptemp = struct.unpack('=f',data[4:8])
-            unpacked_htutemp = struct.unpack('=f', data[8:12])
-            unpacked_htuhumid = struct.unpack('=f', data[12:16])
-            unpacked_windSpeed_MPH = struct.unpack('=f', data[16:20])
-            unpacked_tempCAirflow = struct.unpack('=f', data[20:24])
+            unpacked_mcptemp_top = struct.unpack('=f',data[4:8])
+            unpacked_mcptemp_mid = struct.unpack('=f',data[8:12])
+            unpacked_htutemp = struct.unpack('=f', data[12:16])
+            unpacked_htuhumid = struct.unpack('=f', data[16:20])
+            unpacked_windspeed_mph = struct.unpack('=f', data[20:24])
+            unpacked_tempCairflow = struct.unpack('=f', data[24:28])
             node = int(unpacked_nodeID[0])
             #print('Node ID: ', node)
             #print('MCP9808 Temperature: ' ,unpacked_mcptemp[0])
@@ -79,11 +80,12 @@ class UdpClient():
             #print('HTU21DF Humidity: ', unpacked_htuhumid[0])
 
             # Set hashes in Redis composed of sensor temperature values
-            self.r.hmset('status:node:%d'%node, {'tempBot':unpacked_htutemp[0]})
-            self.r.hmset('status:node:%d'%node, {'tempMid':unpacked_mcptemp[0]})
-            self.r.hmset('status:node:%d'%node, {'humidBot':unpacked_htuhumid[0]})
-            self.r.hmset('status:node:%d'%node, {'windSpeed_MPH':unpacked_mcptemp[0]})
-            self.r.hmset('status:node:%d'%node, {'tempCairflow':unpacked_htuhumid[0]})
+            self.r.hmset('status:node:%d'%node, {'tempTop':unpacked_mcptemp_top[0]})
+            self.r.hmset('status:node:%d'%node, {'tempMid':unpacked_mcptemp_mid[0]})
+            self.r.hmset('status:node:%d'%node, {'humidTemp':unpacked_htutemp[0]})
+            self.r.hmset('status:node:%d'%node, {'humid':unpacked_htuhumid[0]})
+            self.r.hmset('status:node:%d'%node, {'windSpeed_mph':unpacked_windspeed_mph[0]})
+            self.r.hmset('status:node:%d'%node, {'tempCairflow':unpacked_tempCairflow[0]})
             
             # Set timestamp 
             self.r.hmset('status:node:%d'%node, {'timestamp':str(datetime.datetime.now())})

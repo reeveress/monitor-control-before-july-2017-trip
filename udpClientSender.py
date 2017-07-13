@@ -86,7 +86,7 @@ class UdpClient():
         # Set delay before receiving more data
         time.sleep(2)
 
-    def pam(self, command):
+    def pam(self, command, arduinoAddress):
         
         # define arduino socket to send requests
         arduinoSocket = (arduinoAddress, PORT)
