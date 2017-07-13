@@ -30,6 +30,11 @@
 
 
 
+// I2C addresses for the two MCP9808 temperature sensors
+#define TEMP_TOP 0x1A
+#define TEMP_MID 0x1B
+
+
 IPAddress serverIp(10, 0, 1, 224); // Server ip address
 EthernetClient client; // client object
 EthernetUDP Udp; // UDP object
@@ -52,13 +57,13 @@ unsigned int eeNodeAdr = 6; // EEPROM node ID address
 
 
 // Sensor objects
-Adafruit_MCP9808 mcp = Adafruit_MCP9808(); 
+Adafruit_MCP9808 mcpTop = Adafruit_MCP9808(); 
+Adafruit_MCP9808 mcpMid = Adafruit_MCP9808(); 
 Adafruit_HTU21DF htu = Adafruit_HTU21DF();
 
 
 
 // Wind Sensor
-
 #define analogPinForRV    1   // change to pins you the analog pins are using
 #define analogPinForTMP   0
 
@@ -80,7 +85,8 @@ float zeroWind_volts;
 // struct for a UDP packet
 struct sensors {
   float nodeID;
-  float mcpTemp;
+  float mcpTempTop;
+  float mcpTempMid;
   float htuTemp;
   float htuHumid;
   float windSpeed_MPH;
@@ -91,21 +97,24 @@ struct sensors {
 
 
 void setup() {
+
   Watchdog.disable(); // Disable Watchdog so it doesn't get into infinite reset loop
   
   // Initialize Serial for error message output and debugging
-  Serial.begin(9600);
-  Serial.println("Microcontroller reset..");
+  Serial.begin(57600);
+  Serial.println("Running Setup...");
+  
   
   // Read MAC address from EEPROM (burned previously with MACburner.bin sketch)
   for (int i = 0; i < 6; i++){
     mac[i] = EEPROM.read(eeadr);
     ++eeadr;
     }
-    
+   
   // Read node ID from EEPROM (burned with MACburner.bin sketch) and assign it to struct nodeID member
    sensorArray.nodeID = EEPROM.read(eeNodeAdr);
-
+  
+  
   
   for (int i = 0; i < 8; i++) {
     Serial.println("Printing the contents of EEPROM");
@@ -115,99 +124,124 @@ void setup() {
     Serial.print("Data: ");
     Serial.print(EEPROM.read(i));
     Serial.print("\t");
-
   }
+ 
+  
+  // Setting pins appropriately. Very important to first write LOW to digital pins 
+  // because setting the pin as OUTPUT changes it's state and has caused problems with the reset pin 4 before
+  
+  // PSU pin
+  digitalWrite(2, LOW);
+  pinMode(2, OUTPUT);
+  digitalWrite(2, LOW);
+  // White Rabbit 5V pin
+  digitalWrite(3, LOW);
+  pinMode(3, OUTPUT);
+  digitalWrite(3,LOW);
+  // FEM VAC pin
+  digitalWrite(5, LOW);
+  pinMode(5, OUTPUT);
+  digitalWrite(5, LOW);
+  // PAM VAC pin
+  digitalWrite(6, LOW);
+  pinMode(6, OUTPUT);
+  digitalWrite(6, LOW);
+  // reset pin
+  digitalWrite(4, HIGH);
+  pinMode(4, OUTPUT); 
+  digitalWrite(4, HIGH);
+
+  
 
   // Start Ethernet connection, automatically tries to get IP using DHCP
   if (Ethernet.begin(mac) == 0) {
-
-    Serial.println("Failed to configure Ethernet using DHCP");
-    for (;;)
-      ;
+    Serial.println("Failed to configure Ethernet using DHCP, restarting sketch...");
+    delay(10000);
   }
+  Serial.println("Configured IP:");
   Serial.println(Ethernet.localIP());
+  
   
   // Start UDP
   Udp.begin(localPort);
+  Serial.println("UDP initialized!");
   delay(1500); // delay to give time for initialization
 
   
   // Enable Watchdog for 8 seconds
   Watchdog.enable(8000);
+  Serial.println("Watchdog enabled");
 
   // Checking if HTU21DF temp and humidity sensor
   if (!htu.begin()) {
     Serial.println("Couldn't find HTU21DF!");
-    Serial.println("Resetting the Microcontroller until the sensor is back online");
+    //Serial.println("Resetting the Microcontroller until the sensor is back online");
     delay(10000);
   }
-
-  // Checking if sensor is connected; if not keep resetting
-  if (!mcp.begin()) {
-    Serial.println("Couldn't find MCP9808!");
-    Serial.println("Resetting the Microcontroller until the sensor is back online");
-    delay(10000);
-  }
-
-  
-  
-  // Set Pin 4 as the reset pin
-  pinMode(4, OUTPUT);
-  digitalWrite(4, HIGH);
-  // PSU VAC pin
-  pinMode(2, OUTPUT);
-  digitalWrite(2, LOW);
-  // White Rabbit 5V pin
-  pinMode(3, OUTPUT);
-  digitalWrite(3,LOW);
-  // FEM VAC pin
-  pinMode(5, OUTPUT);
-  digitalWrite(5, LOW);
-  // PAM VAC pin
-  pinMode(6, OUTPUT);
-  digitalWrite(6, LOW);
+  Watchdog.reset();
    
+   
+  if (!mcpTop.begin(TEMP_TOP)) {
+    Serial.println("Couldn't find MCP9808 TOP! Restarting sketch...");
+    delay(10000);
+  }
+  Watchdog.reset();
+  
+
+  if (!mcpMid.begin(TEMP_MID)) {
+    Serial.println("Couldn't find MCP9808 MID! Restarting sketch...");
+    delay(10000);
+  }
+  Watchdog.reset();
+  
 }
 
 
  
 void loop() {
-  // Ping the Server to check network connectivity
-  int icmpe_before = millis();
   
   ICMPEchoReply echoReply = ping(serverIp, 4); //takes about 7295 ms to fail
-  int icmpe_after = millis();
-  Serial.println("Time in ms to get ping reply from the server: ");
-  Serial.println(icmpe_after - icmpe_before);
-  if (echoReply.status == SUCCESS){
-    Watchdog.reset();
-      
-    //Serial.println("Wake up MCP9808.... "); // wake up MSP9808 - power consumption ~200 mikro Ampere
-    //tempsensor.shutdown_wake(0);   // Don't remove this line! required before reading temp
-    // Make a temperature reading and save it in a struct
-    int mcp_before = millis();
-    sensorArray.mcpTemp = mcp.readTempC();
-    int mcp_after = millis();
-    Serial.println("Time in ms to get mcpTemp reading: ");
-    Serial.println(mcp_after - mcp_before);
-    
-    //delay(250);
-    //Serial.println("Shutdown MCP9808.... ");
-    //tempsensor.shutdown_wake(1); // shutdown MSP9808 - power consumption ~0.1 mikro Ampere
-    
-    delay(2000);
+//  char buffer [256];
+//  Serial.println(echoReply.status);
+//  if (echoReply.status == SUCCESS)
+//  {
+//    
+//    sprintf(buffer,
+//            "Reply[%d] from: %d.%d.%d.%d: bytes=%d time=%ldms TTL=%d",
+//            echoReply.data.seq,
+//            echoReply.addr[0],
+//            echoReply.addr[1],
+//            echoReply.addr[2],
+//            echoReply.addr[3],
+//            REQ_DATASIZE,
+//            millis() - echoReply.data.time,
+//            echoReply.ttl);
+//  }
+//  else
+//  {
+//    sprintf(buffer, "Echo request failed; %d", echoReply.status);
+//  }
+//  Serial.println(buffer);
+//  delay(500);
+
   
+  if (echoReply.status == SUCCESS){
+    Serial.println("Server ping successful!");
+    Watchdog.reset();
+    sensorArray.mcpTempTop = mcpTop.readTempC();
+    delay(2000);
+    Watchdog.reset();
+    sensorArray.mcpTempMid = mcpMid.readTempC();
+    delay(2000);
+    Watchdog.reset();
+    
+    
     // Read and send humidity and temperature from HTU21DF sensor and send as UDP
-    int htu_before = millis();
     sensorArray.htuTemp = htu.readTemperature();
     sensorArray.htuHumid = htu.readHumidity();
-    int htu_after = millis();
-    Serial.println("Time in ms to get htuTemp reading: ");
-    Serial.println(htu_after - htu_before);
-
+   
  
     // Wind Sensor
-      
     TMP_Therm_ADunits = analogRead(analogPinForTMP);
     RV_Wind_ADunits = analogRead(analogPinForRV);
     RV_Wind_Volts = (RV_Wind_ADunits *  0.0048828125);
@@ -227,41 +261,36 @@ void loop() {
     
     sensorArray.windSpeed_MPH =  pow(((RV_Wind_Volts - zeroWind_volts) /.2300) , 2.7265);   
    
-    Serial.print("  TMP volts ");
-    Serial.print(TMP_Therm_ADunits * 0.0048828125);
+    //Serial.print("  TMP volts ");
+    //Serial.print(TMP_Therm_ADunits * 0.0048828125);
     
-    Serial.print(" RV volts ");
-    Serial.print((float)RV_Wind_Volts);
+    //Serial.print(" RV volts ");
+    //Serial.print((float)RV_Wind_Volts);
 
-    Serial.print("TempC");
-    Serial.print(sensorArray.tempCAirflow);
+    //Serial.print("TempC");
+    //Serial.print(sensorArray.tempCAirflow);
 
-    Serial.print("   ZeroWind volts ");
-    Serial.print(zeroWind_volts);
+    //Serial.print("   ZeroWind volts ");
+    //Serial.print(zeroWind_volts);
 
-    Serial.print("   WindSpeed MPH ");
-    Serial.println(sensorArray.windSpeed_MPH);
+    // Serial.print("   WindSpeed MPH ");
+    // Serial.println(sensorArray.windSpeed_MPH);
       
     
       
       
-    Serial.println("Sending UDP packet......");
-    int udp_before = millis();
+    
     // Send UDP packet to the server ip address serverIp that's listening on port localPort
-    
     Udp.beginPacket(serverIp, localPort); // Initialize the packet send
     Udp.write((byte *)&sensorArray, sizeof sensorArray); // Send the struct as UDP packet
     Udp.endPacket(); // End the packet
-    int udp_after = millis();
-    Serial.println("Time in ms to send a UDP packet: ");
-    Serial.println(udp_after - udp_before);
-
-    // Reset watchdog for good measure
-    //Watchdog.reset();  
+    Serial.println("UDP packet sent...");
+    Watchdog.reset();  
+    
     // Clear UDP packet buffer before sending another packet
     memset(packetBuffer, 0, UDP_TX_PACKET_MAX_SIZE);
-  
-    int udpparse_before = millis();
+  ;
+    
     
     // Check if request was sent to Arduino
     packetSize = Udp.parsePacket(); //Reads the packet size
@@ -272,50 +301,48 @@ void loop() {
       String datReq(packetBuffer); //Convert char array packetBuffer into a string called datReq
       Serial.println("Contents of the packetBuffer: ");
       Serial.println(packetBuffer);
-        
+      Serial.println("datReq:");
+      Serial.println(datReq);
       
       if (datReq == "PSU_on") {
         digitalWrite(2, HIGH);
       }     
       
-      if (datReq == "PSU_off") {
+      else if (datReq == "PSU_off") {
         digitalWrite(2, LOW);
       }
       
-      if (datReq == "WR_on") {
+      else if (datReq == "WR_on") {
         digitalWrite(3, HIGH);
       }
       
-      if (datReq == "WR_off") {
+      else if (datReq == "WR_off") {
         digitalWrite(3, LOW);
       }
       
-      if (datReq == "FEM_on") {
+      else if (datReq == "FEM_on") {
         digitalWrite(5, HIGH);
       }
       
-      if (datReq == "FEM_off") {
+      else if (datReq == "FEM_off") {
         digitalWrite(5, LOW);
       }
       
-      if (datReq == "PAM_on") {
+      else if (datReq == "PAM_on") {
+        Serial.println("Setting pin 6 HIGH");
+        delay(100);
         digitalWrite(6, HIGH);
       }
       
-      if (datReq == "PAM_off") {
+      else if (datReq == "PAM_off") {
         digitalWrite(6, LOW);
       }
       
     
-      if (datReq == "reset") {
+      else if (datReq == "reset") {
         Serial.println("Resetting the microcontroller...");
         digitalWrite(4, LOW);
         }
-    
-    
-      int udpparse_after = millis();
-      Serial.println("Time in ms that it took to check for received packet from udpClient.py, getTempDebug readings, etc..: ");
-      Serial.println(udpparse_after - udpparse_before);
     
     }
 
@@ -331,10 +358,10 @@ void loop() {
   
     
    }
+   else {
+     Serial.println("Server ping unsuccessful, restarting sketch...");
+     delay(10000);
+   }
   
-  
-  
-
 }
-
 
