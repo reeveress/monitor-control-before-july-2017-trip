@@ -11,9 +11,10 @@ import struct
 import redis
 import socket
 import sys
+import smtplib
 
 # Define IP address of the Redis server host machine
-serverAddress = '10.0.1.224'
+serverAddress = '10.28.1.207'
 
 # Define PORT for socket creation
 PORT = 8888
@@ -49,6 +50,14 @@ class UdpClient():
         except socket.error , msg:
                 print('Bind failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1])
                 sys.exit()
+
+
+        # Make a server object to send alerts by email
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.login('heranodemc@gmail.com','monitorcontrol')
+        server.ehlo()
+        server.starttls()
+        
 
     def reset(self, arduinoAddress):
 

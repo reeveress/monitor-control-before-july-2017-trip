@@ -12,9 +12,10 @@ import struct
 import redis
 import socket
 import sys
+import smtplib
 
 # Define IP address of the Redis server host machine
-serverAddress = '10.0.1.224'
+serverAddress = '10.28.1.207'
 
 # Define PORT for socket creation
 PORT = 8888
@@ -50,6 +51,11 @@ class UdpClient():
                 print('Bind failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1])
                 sys.exit()
 
+        # Make a server object to send alerts by email
+        #server = smtplib.SMTP('smtp.gmail.com', 587)
+        #server.login('heranodemc@gmail.com','monitorcontrol')
+        #server.ehlo()
+        #server.starttls()
 
     def receiveUDP(self):
         """
@@ -73,12 +79,11 @@ class UdpClient():
             unpacked_htuhumid = struct.unpack('=f', data[16:20])
             unpacked_windspeed_mph = struct.unpack('=f', data[20:24])
             unpacked_tempCairflow = struct.unpack('=f', data[24:28])
+            unpacked_serial = struct.unpack('=B',data[28])
             node = int(unpacked_nodeID[0])
-            #print('Node ID: ', node)
-            #print('MCP9808 Temperature: ' ,unpacked_mcptemp[0])
-            #print('HTU21DF Temperature: ', unpacked_htutemp[0])
-            #print('HTU21DF Humidity: ', unpacked_htuhumid[0])
 
+            # if (unpacked_mcptemp_top > 27 && unpacked_mcptemp_mid > 27 && unpacked_htutemp > 27):
+               #server.send('heranodemc@gmail.com','recipientemail@gmail.com','The temperature values are approaching critical levels, shutdown sequence initiated') 
             # Set hashes in Redis composed of sensor temperature values
             self.r.hmset('status:node:%d'%node, {'tempTop':unpacked_mcptemp_top[0]})
             self.r.hmset('status:node:%d'%node, {'tempMid':unpacked_mcptemp_mid[0]})
@@ -89,6 +94,6 @@ class UdpClient():
             
             # Set timestamp 
             self.r.hmset('status:node:%d'%node, {'timestamp':str(datetime.datetime.now())})
-
+            self.r.hmset('status:node:%d'%node, {'serial': unpacked_serial[0]})
             print('status:node:%d'%node,self.r.hgetall('status:node:%d'%node))
 
